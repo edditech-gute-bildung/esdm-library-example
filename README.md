@@ -9,6 +9,12 @@ Nothing here runs. There is no library management system in this repository, no
 database, no server. The model is documentation with a strict enough structure
 that tools can read it, check it, and draw it. The point is to be read.
 
+The idea of using a city library to teach event sourcing is not ours. It comes
+from [the native web](https://www.thenativeweb.io/), the people who build ESDM
+itself and who have been teaching event sourcing and domain-driven design with
+this example for years. What follows is one worked-out version of their idea;
+the credit for the idea belongs to them.
+
 ## Why it exists
 
 Most modelling examples fail in one of two directions. Either they are toys — one
@@ -202,8 +208,25 @@ and being cancelled, and what a borrower actually sees.
 
 ## Looking around
 
-The `esdm` command-line tool reads this model. It isn't part of this repository —
-put the binary for your platform in the repository root, then from there:
+The `esdm` command-line tool reads this model. It isn't part of this repository,
+and there's nothing to build: it ships as a pre-built binary for macOS, Linux and
+Windows, and the download links are listed in the ESDM documentation under
+[installing ESDM](https://www.esdm.io/getting-started/installing-esdm/). On an
+Apple-silicon Mac, getting it into the repository root comes down to:
+
+    curl -LO https://esdm.s3.fr-par.scw.cloud/0.14.0/esdm-darwin-arm64
+    mv esdm-darwin-arm64 esdm
+    xattr -d com.apple.quarantine esdm
+    chmod a+x esdm
+    ./esdm version
+
+Swap `darwin-arm64` for `darwin-amd64`, `linux-arm64`, `linux-amd64` or one of
+the Windows builds as your machine requires — the installation page lists them
+all, and carries the current version number. Linux skips the `xattr` line;
+Windows uses `Unblock-File` instead. This model was written against v0.14.0.
+
+The binary is deliberately ignored by git, so it can sit in the repository root
+without ever being committed. From there:
 
     ./esdm view -d model        # the whole model as a tree
     ./esdm glossary -d model    # the vocabulary, area by area
