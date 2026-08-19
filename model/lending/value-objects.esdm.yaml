@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: value-object
+name: due-date
+description: >-
+  When a copy is expected back. A value object rather than a bare date: the
+  rules about extension and grace live with the type, not scattered across
+  everything that carries one.
+scope:
+  domain: library
+  boundedContext: lending
+schema:
+  type: object
+  properties:
+    on:
+      type: string
+      format: date
+      description: The calendar day the copy is due back.
+    extended:
+      type: boolean
+      description: Whether this loan has already been extended once.
+  required: [on]
+invariants:
+  - name: extension-only-once
+    rule: >-
+      A loan is extended at most once. A second request is refused rather than
+      silently ignored, so the borrower learns where they stand.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: domain-service
+name: late-fee
+description: >-
+  What a borrower owes for keeping a copy too long. Stateless arithmetic over
+  the lending calendar that belongs to no single copy, so it sits outside the
+  aggregate rather than inside it.
+scope:
+  domain: library
+  boundedContext: lending
+functions:
+  - name: calculate
+    description: The fee for a copy returned after its due date.
+    arguments:
+      type: object
+      properties:
+        due-on: { type: string, format: date }
+        returned-on: { type: string, format: date }
+      required: [due-on, returned-on]
+    returns:
+      type: object
+      properties:
+        amount-in-cents: { type: integer, minimum: 0 }
+      required: [amount-in-cents]
+    rules:
+      - name: no-fee-within-grace
+        rule: >-
+          The first three days after the due date are free. The library would
+          rather have the copy back than the money.
+      - name: capped-at-replacement-cost
+        rule: >-
+          The fee never exceeds what `replacement-cost` returns for this
+          title.
+  - name: replacement-cost
+    description: >-
+      What replacing a lost or ruined copy of a title would cost. A second
+      function on the same service — `calculate` alone would have made
+      `late-fee` a one-function service, which the schema itself warns is
+      usually a smell — and `calculate` already depends on this one.
+    arguments:
+      type: object
+      properties:
+        isbn: { type: string }
+      required: [isbn]
+    returns:
+      type: object
+      properties:
+        amount-in-cents: { type: integer, minimum: 0 }
+      required: [amount-in-cents]
+    rules:
+      - name: catalog-price-with-a-fallback
+        rule: >-
+          Uses the title's current list price; an out-of-print title falls
+          back to a librarian-set default.

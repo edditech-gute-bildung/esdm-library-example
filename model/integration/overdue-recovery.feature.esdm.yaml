@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=../schemas/given-when-then/v1.yaml
+apiVersion: schema.esdm.io/given-when-then/v1
+kind: feature
+name: overdue-recovery
+description: >-
+  The process-manager variant of Given-When-Then. `when` is polymorphic here —
+  an incoming event or the firing of a named timer — and `then` is the
+  broadest of the four shapes: any combination of emitted commands, armed or
+  cancelled timers, resulting state, and an `ended: true` marker.
+scope:
+  domain: library
+  processManager: overdue-recovery
+scenarios:
+  - name: borrowing-starts-an-instance-and-arms-the-due-date-timer
+    description: >-
+      Nothing is sent yet — the copy is not late, it was only just borrowed.
+    given: []
+    when:
+      boundedContext: lending
+      aggregate: copy
+      event: borrowed
+      data:
+        copy-id: 22222222-2222-2222-2222-222222222222
+        isbn: "978-0132350884"
+        borrower: card-3141
+        due-on: "2026-09-01"
+    then:
+      state:
+        copy-id: 22222222-2222-2222-2222-222222222222
+        borrower: card-3141
+        due-on: "2026-09-01"
+        reminders-sent: 0
+      setTimers:
+        - falls-due
+
+  - name: the-due-date-timer-asks-for-a-reminder-and-rearms
+    given:
+      - boundedContext: lending
+        aggregate: copy
+        event: borrowed
+        data:
+          copy-id: 22222222-2222-2222-2222-222222222222
+          isbn: "978-0132350884"
+          borrower: card-3141
+          due-on: "2026-09-01"
+    when:
+      timer: falls-due
+    then:
+      emits:
+        - boundedContext: lending
+          aggregate: copy
+          command: remind
+          data:
+            copy-id: 22222222-2222-2222-2222-222222222222
+            final-reminder: false
+      setTimers:
+        - next-reminder
+      state:
+        copy-id: 22222222-2222-2222-2222-222222222222
+        borrower: card-3141
+        due-on: "2026-09-01"
+        reminders-sent: 1
+
+  - name: a-returned-copy-cancels-every-timer-and-ends-the-instance
+    given:
+      - boundedContext: lending
+        aggregate: copy
+        event: borrowed
+        data:
+          copy-id: 22222222-2222-2222-2222-222222222222
+          isbn: "978-0132350884"
+          borrower: card-3141
+          due-on: "2026-09-01"
+    when:
+      boundedContext: lending
+      aggregate: copy
+      event: returned
+      data:
+        copy-id: 22222222-2222-2222-2222-222222222222
+        isbn: "978-0132350884"
+        returned-on: "2026-09-05"
+    then:
+      cancelTimers:
+        - falls-due
+        - next-reminder
+      ended: true

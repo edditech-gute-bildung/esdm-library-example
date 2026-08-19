@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: event-handler
+name: hold-ready-notice
+description: >-
+  Tells the borrower their held copy is waiting. An event handler, not a
+  policy: nothing in the domain is triggered, the news simply leaves the
+  system — same reasoning as `due-date-notice`.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: downstream
+  strategy: >-
+    The notification service receives an idempotency key built from
+    `copy-id` and `placed-on`, so a redelivered `placed` sends no second
+    mail.
+handles:
+  - boundedContext: reservations
+    aggregate: hold
+    event: placed
+sideEffects:
+  - type: external-call
+    externalSystem: notifications
+    rule: >-
+      Mail the borrower that the copy they reserved is ready to collect.

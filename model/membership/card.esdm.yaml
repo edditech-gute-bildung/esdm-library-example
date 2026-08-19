@@ -1,0 +1,178 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: bounded-context
+name: membership
+description: >-
+  Who holds a library card, and whether it still works. Borrowers appear
+  everywhere else in this model as bare strings (`card-4711`) with a comment
+  saying identity lives outside the model — this bounded context is that
+  outside, made concrete. A textbook `generic` subdomain: every library
+  needs card administration, none differentiates on it, and it is typically
+  bought rather than built (see the `conformist` mapping in `integration/`).
+scope:
+  domain: library
+ubiquitousLanguage:
+  - term: Card
+    definition: >-
+      A borrower's membership in the library, identified by a `card-number`
+      like `card-4711`. Issued once; blocked if it is abused, not deleted.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: aggregate
+name: card
+description: >-
+  One library card and whether it currently works. Identified by its card
+  number rather than a generated key, the same way `book` is identified by
+  its ISBN — the number is already what every other bounded context uses to
+  name a borrower.
+scope:
+  domain: library
+  boundedContext: membership
+identifiedBy:
+  source: state
+  field: card-number
+state:
+  type: object
+  properties:
+    card-number: { type: string }
+    holder-name: { type: string }
+    status:
+      type: string
+      enum: [active, blocked]
+  required: [card-number, holder-name, status]
+metadata:
+  labels:
+    subdomain: member-administration
+invariants:
+  - name: card-number-set-at-issue
+    rule: >-
+      `card-number` and `holder-name` are set exactly once, when the card is
+      issued, and never change afterwards.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: issue
+description: Register a new library card for a borrower.
+scope:
+  domain: library
+  boundedContext: membership
+  aggregate: card
+data:
+  type: object
+  properties:
+    card-number: { type: string }
+    holder-name: { type: string }
+  required: [card-number, holder-name]
+publishes:
+  - issued
+actors:
+  - registrar
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: issued
+scope:
+  domain: library
+  boundedContext: membership
+  aggregate: card
+data:
+  type: object
+  properties:
+    card-number: { type: string }
+    holder-name: { type: string }
+  required: [card-number, holder-name]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: block
+description: >-
+  Suspend a card, e.g. after persistent overdue. Issued by the
+  `block-persistent-overdue` policy, never by a person — mirrors `stock` and
+  `remind`.
+scope:
+  domain: library
+  boundedContext: membership
+  aggregate: card
+data:
+  type: object
+  properties:
+    card-number: { type: string }
+  required: [card-number]
+publishes:
+  - blocked
+actors:
+  - card-blocker
+constraints:
+  - name: already-blocked-emits-nothing
+    rule: >-
+      A card that is already blocked is not blocked again. The command is
+      accepted and emits nothing — mirrors `remind`'s `only-while-on-loan`,
+      and is what lets `block-persistent-overdue` name `downstream` as its
+      idempotency owner rather than tracking state of its own.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: blocked
+scope:
+  domain: library
+  boundedContext: membership
+  aggregate: card
+data:
+  type: object
+  properties:
+    card-number: { type: string }
+    blocked-on: { type: string, format: date }
+  required: [card-number, blocked-on]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: entity
+name: borrower-contact
+description: >-
+  How to reach the person behind a card. An entity, not a value object: two
+  borrowers may share an address, and we still need to tell them apart.
+  Moved here from lending — contact details belong with the card, not with
+  the copy someone borrowed.
+scope:
+  domain: library
+  boundedContext: membership
+schema:
+  type: object
+  properties:
+    card-number:
+      type: string
+      description: Same card number as `card.identifiedBy`.
+    email:
+      type: string
+      format: email
+    postal-address:
+      type: string
+  required: [card-number]
+identifiedBy:
+  source: schema
+  field: card-number
+invariants:
+  - name: one-reachable-channel
+    rule: >-
+      At least one of `email` or `postal-address` is present, or a due-date
+      notice has nowhere to go.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: card-blocker
+description: >-
+  The automation that suspends a card once persistent overdue has spent the
+  reminder budget — not a person. A system actor with no `backedBy`,
+  mirroring lending's `stock-keeper` and `overdue-scheduler`.
+scope:
+  domain: library
+  boundedContext: membership
+type: system
+responsibilities:
+  - Block a card once a borrower has ignored every reminder

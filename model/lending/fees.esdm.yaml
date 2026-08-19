@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: read-model
+name: fees-owed
+description: >-
+  What a borrower currently owes. Gives `fee-incurred` a consumer — without
+  this, the event would be published into nothing.
+scope:
+  domain: library
+  boundedContext: lending
+paradigm: tabular
+schema:
+  type: array
+  items:
+    type: object
+    properties:
+      borrower: { type: string }
+      isbn: { type: string }
+      amount-in-cents: { type: integer, minimum: 0 }
+      incurred-on: { type: string, format: date }
+    required: [borrower, isbn, amount-in-cents, incurred-on]
+projections:
+  - boundedContext: lending
+    aggregate: copy
+    event: fee-incurred
+    rule: >-
+      Append a row for this borrower, title, and amount, dated by
+      `returned-on`.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: query
+name: check-fees
+description: Lets a borrower see what they currently owe before they come in.
+scope:
+  domain: library
+  boundedContext: lending
+readModel: fees-owed
+parameters:
+  type: object
+  properties:
+    borrower: { type: string }
+  required: [borrower]
+result:
+  type: array
+  items:
+    type: object
+    properties:
+      isbn: { type: string }
+      amount-in-cents: { type: integer, minimum: 0 }
+      incurred-on: { type: string, format: date }
+    required: [isbn, amount-in-cents, incurred-on]
+actors:
+  - borrower
+constraints:
+  - name: single-borrower
+    rule: Filter `fees-owed` to the rows whose `borrower` matches the parameter.

@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: borrower
+description: >-
+  Someone with a library card, in the role of taking copies out and bringing
+  them back. Not a stored person record — identity lives outside this model.
+scope:
+  domain: library
+  boundedContext: lending
+type: human
+responsibilities:
+  - Check whether a title is available
+  - Borrow a copy and return it
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: kiosk
+description: >-
+  The self-service terminal in the foyer. A system actor: it issues the same
+  commands a borrower does, so the model says who may act, not who is human.
+scope:
+  domain: library
+  boundedContext: lending
+type: system
+responsibilities:
+  - Take a copy out on a borrower's own library card
+  - Accept a returned copy outside staffed hours
+backedBy:
+  - self-service-kiosk
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: stock-keeper
+description: >-
+  The automation that puts a copy on the shelf once a title has been
+  catalogued — not a person. A system actor with no `backedBy`: unlike
+  `kiosk`, there is no external channel behind it, just the
+  `stock-acquired-title` policy reacting to a domain event.
+scope:
+  domain: library
+  boundedContext: lending
+type: system
+responsibilities:
+  - Put a newly catalogued title's first copy on the shelf
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: overdue-scheduler
+description: >-
+  The overdue-recovery process manager's own clock. A system actor with no
+  `backedBy`, domain-internal like `stock-keeper` — mirrors ESDM's own
+  `order-timeout-scheduler` example.
+scope:
+  domain: library
+  boundedContext: lending
+type: system
+responsibilities:
+  - Ask for a reminder when a copy falls due or remains overdue

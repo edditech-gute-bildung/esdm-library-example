@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: read-model
+name: cards
+description: Every card on file, and whether it currently works.
+scope:
+  domain: library
+  boundedContext: membership
+paradigm: tabular
+schema:
+  type: array
+  items:
+    type: object
+    properties:
+      card-number: { type: string }
+      holder-name: { type: string }
+      status:
+        type: string
+        enum: [active, blocked]
+    required: [card-number, holder-name, status]
+projections:
+  - boundedContext: membership
+    aggregate: card
+    event: issued
+    rule: Append a row for this card number and holder, with status `active`.
+  - boundedContext: membership
+    aggregate: card
+    event: blocked
+    rule: Set `status` to `blocked` for this card number.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: query
+name: check-card-status
+description: >-
+  Lets staff at the desk see whether a card presented at the counter still
+  works before handing anything over.
+scope:
+  domain: library
+  boundedContext: membership
+readModel: cards
+parameters:
+  type: object
+  properties:
+    card-number: { type: string }
+  required: [card-number]
+result:
+  type: object
+  properties:
+    card-number: { type: string }
+    holder-name: { type: string }
+    status:
+      type: string
+      enum: [active, blocked]
+  required: [card-number, holder-name, status]
+actors:
+  - registrar
+constraints:
+  - name: single-card
+    rule: Filter `cards` to the row whose `card-number` matches the parameter.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: registrar
+description: Staff member who issues cards and looks up their status.
+scope:
+  domain: library
+  boundedContext: membership
+type: human
+responsibilities:
+  - Issue a new library card
+  - Look up whether a card still works

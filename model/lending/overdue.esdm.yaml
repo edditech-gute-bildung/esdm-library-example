@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: remind
+description: >-
+  Ask that a borrower be reminded about a copy that is due. Issued by the
+  overdue-recovery process manager on a timer, never by a person.
+  `final-reminder` is decided by the process manager, which already tracks
+  the count against `at-most-three-reminders` — the reminded event then
+  carries the fact onward, so a stateless downstream consumer (see
+  `block-persistent-overdue`) never needs to correlate across events itself.
+scope:
+  domain: library
+  boundedContext: lending
+  aggregate: copy
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    final-reminder: { type: boolean }
+  required: [copy-id, final-reminder]
+publishes:
+  - reminded
+actors:
+  - overdue-scheduler
+constraints:
+  - name: only-while-on-loan
+    rule: >-
+      A copy that came back before the timer fired is not reminded about. The
+      command is accepted and emits nothing.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: reminded
+description: >-
+  Records that a reminder went out for a copy still on loan. Carries
+  `final-reminder` straight through from the command — see `remind`.
+scope:
+  domain: library
+  boundedContext: lending
+  aggregate: copy
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    isbn: { type: string }
+    borrower: { type: string }
+    due-on: { type: string, format: date }
+    final-reminder: { type: boolean }
+  required: [copy-id, borrower, due-on, final-reminder]

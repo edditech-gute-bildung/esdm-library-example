@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: context-mapping
+name: cataloging-to-reservations
+description: >-
+  Cataloging owns the vocabulary of titles here too. One publisher, two
+  consumers: this mirrors `cataloging-to-lending` rather than inventing a
+  second pattern for the same relationship — the schema explicitly records
+  several mappings for one publisher with several consumers, rather than
+  one mapping with a list. Backed by a real consumer: `active-reservations`
+  projects `cataloging/book/acquired` so reservations shows titles, not
+  bare ISBNs.
+type: published-language
+publisher:
+  domain: library
+  boundedContext: cataloging
+consumer:
+  domain: library
+  boundedContext: reservations
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: context-mapping
+name: reservations-supplied-by-lending
+description: >-
+  Reservations cannot fulfil its promise on its own — it depends on lending
+  to actually hand a copy over. Backed by the `hold-for-next-in-line` policy:
+  a `lending/copy/returned` event drives a `reservations/hold/place` command.
+type: customer-supplier
+customer:
+  domain: library
+  boundedContext: reservations
+supplier:
+  domain: library
+  boundedContext: lending
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: context-mapping
+name: kiosk-to-lending
+description: >-
+  The only use of the `externalSystemReference` branch of `mappingEndpoint`
+  in this model: the upstream side is a vendor firmware, not a bounded
+  context. The kiosk's own protocol is translated at the boundary rather
+  than let its concepts leak into the `copy` aggregate — backed by the
+  `kiosk` actor, which already issues `borrow` and `return` through that
+  translation.
+type: anti-corruption-layer
+downstream:
+  domain: library
+  boundedContext: lending
+upstream:
+  domain: library
+  externalSystem: self-service-kiosk
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: context-mapping
+name: lending-conforms-to-membership
+description: >-
+  We buy the card system, so we take its model as given rather than
+  negotiating it — the pairing to the `member-administration` `generic`
+  subdomain lesson. Backed by `block-persistent-overdue`: a
+  `lending/copy/reminded` event drives a `membership/card/block` command.
+type: conformist
+conformist:
+  domain: library
+  boundedContext: lending
+upstream:
+  domain: library
+  boundedContext: membership
+
