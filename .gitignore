@@ -1,4 +1,4 @@
 # The esdm CLI is a build artifact of the esdm toolchain, not part of this
 # example. Drop the binary for your platform here to run the commands in
-# model/README.md.
+# README.md.
 /esdm
