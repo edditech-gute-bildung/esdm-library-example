@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: process-manager
+name: overdue-recovery
+description: >-
+  Chases a copy that has not come back. A process manager rather than a policy:
+  it waits, it remembers what it already did, and it stops when the copy
+  returns — none of which a stateless reaction can do.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: self
+  strategy: >-
+    Each instance records which reminders it has sent in `reminders-sent`, so a
+    redelivered `borrowed` neither starts a second chase nor re-sends a notice.
+correlatedBy:
+  source: event-field
+  field: copy-id
+state:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    borrower: { type: string }
+    due-on:
+      type: string
+      format: date
+      description: Drives the `falls-due` timer. Copied from `borrowed`.
+    reminders-sent: { type: integer, minimum: 0 }
+  required: [copy-id, borrower, due-on]
+invariants:
+  - name: at-most-three-reminders
+    rule: >-
+      A borrower is reminded at most three times. Past that the copy is a
+      matter for a person, not a timer.
+constraints:
+  - name: suspended-while-closed
+    rule: >-
+      Timers still arm and fire on schedule, but no reminder is actually
+      sent while the library is closed (holidays, closures) — the reaction
+      waits for the next opening day instead.
+startsWhen:
+  - boundedContext: lending
+    aggregate: copy
+    event: borrowed
+endsWhen:
+  - name: copy-came-back
+    condition: >-
+      The copy was returned. Every armed timer is cancelled and the instance
+      completes.
+  - name: reminder-budget-spent
+    condition: >-
+      Three reminders went out and the copy is still not back. The instance
+      completes and stops chasing.
+timers:
+  - name: falls-due
+    description: Fires on the due date itself, before anything is overdue.
+    at: due-on
+  - name: next-reminder
+    description: Spacing between reminders once a copy is genuinely late.
+    after:
+      value: 7
+      unit: days
+reactions:
+  - when:
+      boundedContext: lending
+      aggregate: copy
+      event: borrowed
+    rule: >-
+      Record the borrower and the due date, then arm the timer for the due
+      date. Nothing is sent yet — the copy is not late.
+    setTimers:
+      - falls-due
+  - when:
+      timer: falls-due
+    rule: >-
+      The copy is now due. Ask for a reminder — the first of at most three,
+      so `final-reminder` is `false` — and arm the spacing timer for the
+      next one.
+    emits:
+      - boundedContext: lending
+        aggregate: copy
+        command: remind
+    setTimers:
+      - next-reminder
+  - when:
+      timer: next-reminder
+    rule: >-
+      Still not back. Ask for another reminder while the budget in
+      `at-most-three-reminders` allows, marking `final-reminder` `true` only
+      when this is the third. Re-arm regardless of which one this was —
+      `reminder-budget-spent` retires the instance right after the third
+      reminder is sent, so the timer this reaction just set never gets the
+      chance to fire again.
+    emits:
+      - boundedContext: lending
+        aggregate: copy
+        command: remind
+    setTimers:
+      - next-reminder
+  - when:
+      boundedContext: lending
+      aggregate: copy
+      event: returned
+    rule: >-
+      The copy is back. Cancel everything armed and let the instance end.
+    cancelTimers:
+      - falls-due
+      - next-reminder
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event-handler
+name: overdue-reminder-notice
+description: >-
+  Puts a reminder in front of the borrower. Separate from `due-date-notice`
+  because the two say different things and will diverge in wording.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: downstream
+  strategy: >-
+    The notification service is given an idempotency key of `copy-id` plus the
+    reminder count, so a redelivered `reminded` sends no second mail.
+handles:
+  - boundedContext: lending
+    aggregate: copy
+    event: reminded
+sideEffects:
+  - type: external-call
+    externalSystem: notifications
+    rule: >-
+      Mail the borrower that the copy is overdue and what it will cost.

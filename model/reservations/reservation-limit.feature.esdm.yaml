@@ -1,0 +1,139 @@
+# yaml-language-server: $schema=../schemas/given-when-then/v1.yaml
+apiVersion: schema.esdm.io/given-when-then/v1
+kind: feature
+name: reservation-limit
+description: >-
+  The DCB variant of Given-When-Then. Note the shape difference from the
+  aggregate feature: `given` carries full event references
+  (`{boundedContext, event, data}`, no `aggregate` — `reserved` and
+  `released` are free-standing) rather than bare event names, because a
+  dynamic-consistency-boundary consults events from across its bounded
+  context instead of owning a single producer.
+scope:
+  domain: library
+  boundedContext: reservations
+  dynamicConsistencyBoundary: reservation-limit
+scenarios:
+  - name: reserve-succeeds-below-the-limit
+    given:
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0132350884"
+          reserved-on: "2026-08-01"
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0201633610"
+          reserved-on: "2026-08-03"
+    when:
+      command: reserve
+      data:
+        borrower: card-4711
+        isbn: "978-0135957059"
+      actor: borrower
+    then:
+      events:
+        - event: reserved
+          data:
+            borrower: card-4711
+            isbn: "978-0135957059"
+            reserved-on: "2026-08-20"
+
+  - name: fourth-reservation-is-rejected
+    description: >-
+      The invariant reads the consulted `reserved` events for this borrower —
+      none of them released — and refuses before a fourth is appended.
+    given:
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0132350884"
+          reserved-on: "2026-08-01"
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0201633610"
+          reserved-on: "2026-08-03"
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0135957059"
+          reserved-on: "2026-08-20"
+    when:
+      command: reserve
+      data:
+        borrower: card-4711
+        isbn: "978-1491950357"
+      actor: borrower
+    then:
+      rejection:
+        invariant: at-most-three-active-reservations
+
+  - name: a-released-reservation-frees-a-slot
+    description: >-
+      Shows the `released` consult doing its job: three reservations placed,
+      one released, so the count the invariant sees is back down to two and
+      a fourth title can be reserved.
+    given:
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0132350884"
+          reserved-on: "2026-08-01"
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0201633610"
+          reserved-on: "2026-08-03"
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0135957059"
+          reserved-on: "2026-08-20"
+      - boundedContext: reservations
+        event: released
+        data:
+          borrower: card-4711
+          isbn: "978-0132350884"
+          released-on: "2026-08-25"
+    when:
+      command: reserve
+      data:
+        borrower: card-4711
+        isbn: "978-1491950357"
+      actor: borrower
+    then:
+      events:
+        - event: reserved
+          data:
+            borrower: card-4711
+            isbn: "978-1491950357"
+            reserved-on: "2026-08-26"
+
+  - name: release-without-a-matching-reservation-is-rejected
+    description: >-
+      No named invariant covers this — "you cannot release a reservation
+      you never placed" is not a limit on active reservations, just a
+      precondition on `release` — so the rejection is prose rather than an
+      invariant reference.
+    given: []
+    when:
+      command: release
+      data:
+        borrower: card-4711
+        isbn: "978-1491950357"
+      actor: borrower
+    then:
+      rejection:
+        reason: >-
+          No open reservation exists for this borrower and this title; there
+          is nothing to release.

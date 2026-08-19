@@ -1,0 +1,228 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: bounded-context
+name: reservations
+description: >-
+  Holding a copy for a borrower before they collect it. Exists in the fixture to
+  cover the selector-based consistency unit and its free-standing events, which
+  the aggregate-only contexts cannot exercise.
+scope:
+  domain: library
+ubiquitousLanguage:
+  - term: Reservation
+    definition: >-
+      A borrower's claim on the next available copy of a title. It names a
+      title, never a particular volume.
+    avoid:
+      - term: Hold
+        reason: >-
+          Staff use "hold" for a copy already pulled from the shelf, which is a
+          later and different state.
+  - term: Reservation limit
+    definition: >-
+      How many open reservations one borrower may hold at once. The rule this
+      whole context exists to enforce.
+  - term: Hold
+    definition: >-
+      A specific copy pulled from the shelf and set aside for one borrower to
+      collect, with a slip in the book recording who it's for. A later,
+      narrower state than a Reservation — a title only becomes a Hold once an
+      actual copy exists and is claimed for this borrower. Deliberately kept
+      alongside the `avoid` entry under Reservation above: "Hold" was
+      rejected as a synonym for Reservation, but it is a real concept in its
+      own right, modelled by the `hold` aggregate.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: dynamic-consistency-boundary
+name: reservation-limit
+description: >-
+  "A borrower may hold at most three active reservations" is a decision over two
+  keys — the borrower and the title — and over events that belong to no single
+  container. A selector-based unit, spanned per decision, rather than an
+  aggregate.
+scope:
+  domain: library
+  boundedContext: reservations
+identifiedBy:
+  - name: borrower
+    source: command-payload
+    field: borrower
+consults:
+  - boundedContext: reservations
+    event: reserved
+    criteria: Reservations already placed by this borrower and not yet released.
+  - boundedContext: reservations
+    event: released
+    criteria: Releases, which take a reservation back out of the count.
+  - boundedContext: reservations
+    aggregate: hold
+    event: collected
+    criteria: >-
+      Collections by this borrower, which take a reservation out of the
+      count just as a release does — only here the DCB and the `hold`
+      aggregate sit side by side in the same bounded context.
+invariants:
+  - name: at-most-three-active-reservations
+    rule: >-
+      A borrower with three reservations that have not been released cannot
+      place a fourth. The fourth request is rejected.
+  - name: no-duplicate-reservation-per-title
+    rule: >-
+      A borrower with an open reservation for a title — not yet released,
+      not yet collected — cannot reserve that same title again. The
+      duplicate request is rejected. Evaluated from the same borrower-keyed
+      consulted state as the count above; the title comparison is decision
+      logic, not a second identity key.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: reserve
+description: >-
+  Bound to the boundary rather than to an aggregate, so its events are
+  free-standing within the bounded context.
+scope:
+  domain: library
+  boundedContext: reservations
+  dynamicConsistencyBoundary: reservation-limit
+data:
+  type: object
+  properties:
+    borrower: { type: string }
+    isbn: { type: string }
+  required: [borrower, isbn]
+publishes:
+  - reserved
+actors:
+  - borrower
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: reserved
+description: >-
+  Free-standing: its scope names a bounded context and no aggregate, because a
+  boundary reads events rather than owning them. A reference to this event is
+  therefore a `{boundedContext, event}` pair, never a triple.
+scope:
+  domain: library
+  boundedContext: reservations
+data:
+  type: object
+  properties:
+    borrower: { type: string }
+    isbn: { type: string }
+    reserved-on: { type: string, format: date }
+  required: [borrower, isbn, reserved-on]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: release
+scope:
+  domain: library
+  boundedContext: reservations
+  dynamicConsistencyBoundary: reservation-limit
+data:
+  type: object
+  properties:
+    borrower: { type: string }
+    isbn: { type: string }
+  required: [borrower, isbn]
+publishes:
+  - released
+actors:
+  - borrower
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: released
+scope:
+  domain: library
+  boundedContext: reservations
+data:
+  type: object
+  properties:
+    borrower: { type: string }
+    isbn: { type: string }
+    released-on: { type: string, format: date }
+  required: [borrower, isbn, released-on]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: read-model
+name: active-reservations
+description: >-
+  Deliberately projects an event from another bounded context
+  (`cataloging/book/acquired`) so the list shows titles, not bare ISBNs —
+  the reason the `cataloging-to-reservations` context mapping in
+  `integration/` is real rather than decorative, mirroring how
+  `cataloging-to-lending` backs `availability`.
+scope:
+  domain: library
+  boundedContext: reservations
+paradigm: tabular
+schema:
+  type: array
+  items:
+    type: object
+    properties:
+      borrower: { type: string }
+      isbn: { type: string }
+      title: { type: string }
+    required: [borrower, isbn, title]
+projections:
+  - boundedContext: cataloging
+    aggregate: book
+    event: acquired
+    rule: >-
+      Record the title for this isbn, so rows appended by `reserved` can
+      display it instead of a bare isbn.
+  - boundedContext: reservations
+    event: reserved
+    rule: Append a row for this borrower, isbn, and the title recorded for that isbn.
+  - boundedContext: reservations
+    event: released
+    rule: Remove the row for this borrower and title.
+  - boundedContext: reservations
+    aggregate: hold
+    event: collected
+    rule: Remove the row for this borrower and title — the reservation is fulfilled.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: query
+name: list-reservations
+scope:
+  domain: library
+  boundedContext: reservations
+readModel: active-reservations
+result:
+  type: array
+  items:
+    type: object
+    properties:
+      borrower: { type: string }
+      isbn: { type: string }
+      title: { type: string }
+    required: [borrower, isbn, title]
+actors:
+  - borrower
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: borrower
+description: >-
+  Reservations has its own borrower, distinct from lending's. Actors are
+  bounded-context scoped precisely so the same word can mean different things
+  either side of a boundary.
+scope:
+  domain: library
+  boundedContext: reservations
+type: human
+responsibilities:
+  - Reserve a title that is currently out
+  - Release a reservation that is no longer wanted

@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=./schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: subdomain
+name: lending-operations
+description: >-
+  Getting the right copy into the right hands and back again. The library's
+  reason to exist, and the part no off-the-shelf product would get right for
+  us — so `core`, and where the modelling effort goes.
+scope:
+  domain: library
+type: core            # differentiating; where the modelling effort goes
+boundedContexts:
+  - lending
+  - reservations
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: subdomain
+name: catalog-management
+description: >-
+  Knowing which titles exist. Necessary, but not what distinguishes this
+  library from any other — `supporting` rather than `core`.
+scope:
+  domain: library
+type: supporting      # necessary, but any library would have it
+boundedContexts:
+  - cataloging
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: subdomain
+name: member-administration
+description: >-
+  Issuing and blocking library cards. Every library needs this and none
+  differentiates on it — the textbook `generic` subdomain: bought rather
+  than built, and taken as-is rather than negotiated (see the `conformist`
+  mapping in `integration/`).
+scope:
+  domain: library
+type: generic         # commodity problem; would typically be bought
+boundedContexts:
+  - membership

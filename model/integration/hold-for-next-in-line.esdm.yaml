@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: policy
+name: hold-for-next-in-line
+description: >-
+  A returned copy someone is waiting for goes on the hold shelf for them
+  rather than back into general circulation. A policy, not an event
+  handler: it drives a decision back into the domain (`place`) rather than
+  reporting outward. Backs the `reservations-supplied-by-lending`
+  customer-supplier mapping — reservations depends on lending to actually
+  hand a copy over.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: downstream
+  strategy: >-
+    `place` is keyed by `copy-id`, so a redelivered `returned` does not put
+    the same copy on hold twice.
+handles:
+  - boundedContext: lending
+    aggregate: copy
+    event: returned
+emits:
+  - boundedContext: reservations
+    aggregate: hold
+    command: place
+constraints:
+  - name: only-when-someone-is-waiting
+    rule: >-
+      Fires only when `active-reservations` holds an open reservation for
+      this copy's isbn. A returned copy with no one waiting simply becomes
+      available for ordinary borrowing again; no command is emitted.
+  - name: oldest-reservation-first
+    rule: >-
+      When more than one borrower is waiting for the same title, the copy
+      goes to whichever reservation was placed first.

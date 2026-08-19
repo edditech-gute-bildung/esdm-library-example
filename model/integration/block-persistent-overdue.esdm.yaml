@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: policy
+name: block-persistent-overdue
+description: >-
+  Three reminders and the copy is still not back — persistent overdue has a
+  real consequence: the card gets blocked until it is sorted out. Backs the
+  `lending-conforms-to-membership` conformist mapping: lending takes
+  membership's card model as given rather than negotiating it, since the
+  card system is bought, not built. `reminded`'s `borrower` field is already
+  a card number (`card-4711`), so no translation is needed to call `block`.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: downstream
+  strategy: >-
+    `block`'s own `already-blocked-emits-nothing` constraint absorbs a
+    redelivered `reminded` event without this policy tracking anything
+    itself.
+handles:
+  - boundedContext: lending
+    aggregate: copy
+    event: reminded
+emits:
+  - boundedContext: membership
+    aggregate: card
+    command: block
+constraints:
+  - name: only-on-the-final-reminder
+    rule: >-
+      Fires only when the `reminded` event's `final-reminder` is `true` —
+      the fact `overdue-recovery` stamps on the third reminder, so this
+      stateless policy never needs to count reminders itself.

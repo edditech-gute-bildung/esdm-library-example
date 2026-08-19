@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=../schemas/domain-storytelling/v1.yaml
+apiVersion: schema.esdm.io/domain-storytelling/v1
+kind: domain-story
+name: taking-a-copy-home
+description: >-
+  How a borrower actually leaves with a book today, told the way the librarian
+  told it. Recorded before any of the lending model existed — the aggregate and
+  its commands were read out of this story afterwards.
+scope:
+  domain: library
+pointInTime: as-is
+granularity: coarse-grained
+domainPurity: digitalized
+groups:
+  - name: at-the-desk
+    description: Everything that happens in the building, in front of a person.
+actors:
+  - name: borrower
+    annotation: Holds a library card. May already have copies at home.
+    groups:
+      - at-the-desk
+  - name: librarian
+    annotation: Works the lending desk.
+    groups:
+      - at-the-desk
+sentences:
+  - sequenceNumber: 1
+    workObjects:
+      - name: copy
+        annotation: A physical volume off the shelf, not a title.
+        groups:
+          - at-the-desk
+    edges:
+      - from:
+          actor: borrower
+        to:
+          workObject: copy
+        label: picks
+        annotation: >-
+          The borrower chooses a specific volume. Which one matters — this is
+          where "copy" stops meaning "book".
+        groups:
+          - at-the-desk
+  - sequenceNumber: 2
+    workObjects:
+      - name: library-card
+      - name: copy
+    edges:
+      - from:
+          actor: borrower
+        to:
+          workObject: library-card
+        label: hands over
+        groups:
+          - at-the-desk
+      - from:
+          actor: librarian
+        to:
+          workObject: copy
+        label: scans
+        annotation: >-
+          The scan is the moment the loan begins. The librarian was clear that
+          nothing counts until it beeps.
+        groups:
+          - at-the-desk
+  - sequenceNumber: 3
+    workObjects:
+      - name: due-date-slip
+        annotation: >-
+          Printed and tucked into the copy. The borrower treats this, not any
+          email, as the real record.
+    edges:
+      - from:
+          actor: librarian
+        to:
+          workObject: due-date-slip
+        label: prints for
+      - from:
+          workObject: due-date-slip
+        to:
+          actor: borrower
+        label: goes home with

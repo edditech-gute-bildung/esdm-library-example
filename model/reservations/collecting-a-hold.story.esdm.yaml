@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=../schemas/domain-storytelling/v1.yaml
+apiVersion: schema.esdm.io/domain-storytelling/v1
+kind: domain-story
+name: collecting-a-hold
+description: >-
+  How the handover *should* feel, told without reference to any system — the
+  way a DS workshop actually starts, before anyone talks about software. All
+  three enum values `taking-a-copy-home` doesn't use, in one document:
+  `to-be` rather than `as-is`, `fine-grained` rather than `coarse-grained`,
+  `pure` rather than `digitalized`. A natural pair with that story and with
+  the `hold` aggregate it envisions the front side of.
+scope:
+  domain: library
+pointInTime: to-be
+granularity: fine-grained
+domainPurity: pure
+groups:
+  - name: at-the-desk
+    description: Everything that happens at the circulation desk.
+actors:
+  - name: borrower
+    annotation: Was told their reservation was ready and has come to collect it.
+    groups:
+      - at-the-desk
+  - name: librarian
+    annotation: Works the lending desk.
+    groups:
+      - at-the-desk
+sentences:
+  - sequenceNumber: 1
+    edges:
+      - from:
+          actor: borrower
+        to:
+          actor: librarian
+        label: asks
+        annotation: >-
+          Names the title, not a slip or a number — nothing has been scanned,
+          so there is nothing yet to look up by.
+        groups:
+          - at-the-desk
+  - sequenceNumber: 2
+    workObjects:
+      - name: hold-shelf
+        annotation: Where copies wait, each with a borrower's name on a slip.
+      - name: held-copy
+        annotation: Sits on the hold shelf, set aside since it came back.
+    edges:
+      - from:
+          actor: librarian
+        to:
+          workObject: hold-shelf
+        label: checks
+      - from:
+          actor: librarian
+        to:
+          workObject: held-copy
+        label: finds
+  - sequenceNumber: 3
+    workObjects:
+      - name: slip
+        annotation: Tucked into the copy, naming the borrower it is waiting for.
+    edges:
+      - from:
+          actor: librarian
+        to:
+          workObject: slip
+        label: reads
+        annotation: Confirms the name before handing anything over.
+  - sequenceNumber: 4
+    edges:
+      - from:
+          actor: librarian
+        to:
+          workObject: slip
+        label: removes
+      - from:
+          actor: librarian
+        to:
+          workObject: held-copy
+        label: hands over
+      - from:
+          workObject: held-copy
+        to:
+          actor: borrower
+        label: goes to
+  - sequenceNumber: 5
+    edges:
+      - from:
+          actor: borrower
+        to:
+          actor: librarian
+        annotation: >-
+          A nod is enough. Nothing in this sentence needs a system to
+          notice — which is the point of telling it `pure`.

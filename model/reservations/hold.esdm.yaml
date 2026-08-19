@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: aggregate
+name: hold
+description: >-
+  A specific copy pulled from the shelf and set aside for one borrower — the
+  state a Reservation is waiting to reach. Identified by `copy-id` rather
+  than a generated key: at most one hold can ever exist for a given physical
+  copy at a time, so the copy's own identity already identifies the hold.
+scope:
+  domain: library
+  boundedContext: reservations
+identifiedBy:
+  source: state
+  field: copy-id
+state:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    isbn: { type: string }
+    borrower: { type: string }
+    placed-on: { type: string, format: date }
+  required: [copy-id, isbn, borrower, placed-on]
+invariants:
+  - name: only-placed-holds-can-be-collected
+    rule: >-
+      A hold that has already been collected cannot be collected again. The
+      second request is rejected rather than queued.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: place
+description: >-
+  Put a specific copy on the hold shelf for a borrower. Issued by the
+  `hold-for-next-in-line` policy when a copy someone is waiting for comes
+  back, never by a person.
+scope:
+  domain: library
+  boundedContext: reservations
+  aggregate: hold
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    isbn: { type: string }
+    borrower: { type: string }
+  required: [copy-id, isbn, borrower]
+publishes:
+  - placed
+actors:
+  - hold-keeper
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: placed
+scope:
+  domain: library
+  boundedContext: reservations
+  aggregate: hold
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    isbn: { type: string }
+    borrower: { type: string }
+    placed-on: { type: string, format: date }
+  required: [copy-id, isbn, borrower, placed-on]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: command
+name: collect
+description: The borrower comes in and takes the held copy off the shelf.
+scope:
+  domain: library
+  boundedContext: reservations
+  aggregate: hold
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+  required: [copy-id]
+publishes:
+  - collected
+actors:
+  - borrower
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: event
+name: collected
+description: >-
+  The reservation this hold was waiting to fulfil is done — see the
+  `reservation-limit` consult on this event.
+scope:
+  domain: library
+  boundedContext: reservations
+  aggregate: hold
+data:
+  type: object
+  properties:
+    copy-id: { type: string, format: uuid }
+    isbn: { type: string }
+    borrower: { type: string }
+    collected-on: { type: string, format: date }
+  required: [copy-id, isbn, borrower, collected-on]
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: hold-keeper
+description: >-
+  The automation that puts a copy on the hold shelf once it is free and
+  someone is waiting for it — not a person. A system actor with no
+  `backedBy`, mirroring lending's `stock-keeper`.
+scope:
+  domain: library
+  boundedContext: reservations
+type: system
+responsibilities:
+  - Put a returned copy on the hold shelf for the borrower waiting on it

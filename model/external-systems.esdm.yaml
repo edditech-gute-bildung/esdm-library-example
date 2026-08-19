@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=./schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: external-system
+name: notifications
+description: >-
+  Whatever actually delivers mail to borrowers. Modelled as an external system
+  rather than a bounded context: we name the surface we use, not the service.
+scope:
+  domain: library
+direction: outbound
+category: mail
+capabilities:
+  - Send a borrower the due date for a copy they just took out
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: external-system
+name: self-service-kiosk
+description: >-
+  The terminal vendor's firmware. Inbound: commands originate there and land
+  in lending, so we name the surface rather than model its internals.
+scope:
+  domain: library
+direction: inbound
+category: self-service
+capabilities:
+  - Borrow a copy against a scanned library card
+  - Accept a returned copy and print a receipt

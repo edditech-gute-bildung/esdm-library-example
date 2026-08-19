@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: event-handler
+name: reservation-notice
+description: >-
+  Confirms a reservation went through. The only event handler in this model
+  that handles a free-standing event: `reserved` has no aggregate owner, so
+  its reference is `{boundedContext, event}`, not a triple.
+scope:
+  domain: library
+deliveryGuarantee: at-least-once
+idempotency:
+  owner: downstream
+  strategy: >-
+    The notification service receives an idempotency key built from
+    `borrower` and `reserved-on`, so a redelivered `reserved` sends no
+    second mail.
+handles:
+  - boundedContext: reservations
+    event: reserved
+sideEffects:
+  - type: external-call
+    externalSystem: notifications
+    rule: Mail the borrower confirming the reservation and the title.
+  - type: other
+    rule: Append an entry to the borrower's activity log recording the reservation.

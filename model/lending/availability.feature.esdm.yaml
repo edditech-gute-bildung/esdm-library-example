@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=../schemas/given-when-then/v1.yaml
+apiVersion: schema.esdm.io/given-when-then/v1
+kind: feature
+name: availability
+description: >-
+  The read-model variant of Given-When-Then. `given` carries full event
+  references because `availability` projects across bounded contexts
+  (`cataloging/book/acquired` as well as lending's own copy events); `when`
+  is always a named query plus parameters — even the second scenario, which
+  asserts the materialized `readModel` directly rather than the query's
+  shaped `result`, still triggers through a query.
+scope:
+  domain: library
+  boundedContext: lending
+  readModel: availability
+scenarios:
+  - name: check-availability-returns-the-remaining-count
+    given:
+      - boundedContext: cataloging
+        aggregate: book
+        event: acquired
+        data:
+          title: Structure and Interpretation of Computer Programs
+          author: Abelson & Sussman
+          isbn: "978-0262510875"
+      - boundedContext: lending
+        aggregate: copy
+        event: stocked
+        data:
+          copy-id: 33333333-3333-3333-3333-333333333333
+          isbn: "978-0262510875"
+      - boundedContext: lending
+        aggregate: copy
+        event: stocked
+        data:
+          copy-id: 44444444-4444-4444-4444-444444444444
+          isbn: "978-0262510875"
+      - boundedContext: lending
+        aggregate: copy
+        event: borrowed
+        data:
+          copy-id: 33333333-3333-3333-3333-333333333333
+          isbn: "978-0262510875"
+          borrower: card-4711
+          due-on: "2026-09-14"
+    when:
+      query: check-availability
+      parameters:
+        isbn: "978-0262510875"
+    then:
+      result:
+        isbn: "978-0262510875"
+        title: Structure and Interpretation of Computer Programs
+        copies-available: 1
+
+  - name: an-acquired-title-with-no-copy-yet-still-has-a-row
+    description: >-
+      The reason `availability` projects `cataloging/book/acquired` at all —
+      the title is known here, at zero counts, before any copy has ever been
+      stocked.
+    given:
+      - boundedContext: cataloging
+        aggregate: book
+        event: acquired
+        data:
+          title: Structure and Interpretation of Computer Programs
+          author: Abelson & Sussman
+          isbn: "978-0262510875"
+      - boundedContext: cataloging
+        aggregate: book
+        event: acquired
+        data:
+          title: The C Programming Language
+          author: Kernighan & Ritchie
+          isbn: "978-0131103627"
+      - boundedContext: lending
+        aggregate: copy
+        event: stocked
+        data:
+          copy-id: 33333333-3333-3333-3333-333333333333
+          isbn: "978-0262510875"
+    when:
+      query: check-availability
+      parameters:
+        isbn: "978-0262510875"
+    then:
+      readModel:
+        - isbn: "978-0262510875"
+          title: Structure and Interpretation of Computer Programs
+          copies-total: 1
+          copies-available: 1
+        - isbn: "978-0131103627"
+          title: The C Programming Language
+          copies-total: 0
+          copies-available: 0

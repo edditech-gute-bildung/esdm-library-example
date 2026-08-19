@@ -1,0 +1,138 @@
+# yaml-language-server: $schema=../schemas/core/v1.yaml
+apiVersion: schema.esdm.io/core/v1
+kind: read-model
+name: books
+description: The catalog as a flat list, one row per book.
+scope:
+  domain: library
+  boundedContext: cataloging
+paradigm: tabular
+schema:
+  type: array
+  items:
+    type: object
+    properties:
+      title: { type: string }
+      author: { type: string }
+      isbn: { type: string }
+    required: [title, author, isbn]
+projections:
+  - boundedContext: cataloging
+    aggregate: book
+    event: acquired
+    rule: Append a row with `title`, `author`, and `isbn`.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: query
+name: list-books
+description: >-
+  `result` mirrors the read model's schema because the whole table is returned,
+  but they stay two separate schemas — a query may filter or shape its result
+  independently.
+scope:
+  domain: library
+  boundedContext: cataloging
+readModel: books
+result:
+  type: array
+  items:
+    type: object
+    properties:
+      title: { type: string }
+      author: { type: string }
+      isbn: { type: string }
+    required: [title, author, isbn]
+actors:
+  - librarian
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: read-model
+name: catalog-search
+description: >-
+  A second read model over the same `acquired` event, in a different
+  paradigm than `books` — the CQRS point that matters, better shown than
+  claimed: one write, several purpose-built views. Only this one extra
+  paradigm is modelled; the remaining seven live in `paradigm`'s enum and
+  tooling reads them from the schema, not from this fixture.
+scope:
+  domain: library
+  boundedContext: cataloging
+paradigm: search-index
+schema:
+  type: object
+  description: >-
+    A search index is normally opaque to the caller (an inverted index, not
+    a table); this names the fields free-text search runs over.
+  properties:
+    indexedFields:
+      type: array
+      items:
+        type: string
+      description: The book fields searchable as free text.
+  required: [indexedFields]
+projections:
+  - boundedContext: cataloging
+    aggregate: book
+    event: acquired
+    rule: Index this book's `title` and `author` for free-text search, keyed by `isbn`.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: query
+name: search-catalog
+description: Public catalog search, open to anyone — unlike borrowing, no card required.
+scope:
+  domain: library
+  boundedContext: cataloging
+readModel: catalog-search
+paradigm: search-index
+parameters:
+  type: object
+  properties:
+    text: { type: string }
+  required: [text]
+result:
+  type: array
+  items:
+    type: object
+    properties:
+      isbn: { type: string }
+      title: { type: string }
+      author: { type: string }
+      score: { type: number }
+    required: [isbn, title, author, score]
+actors:
+  - visitor
+constraints:
+  - name: ranked-by-relevance
+    rule: Matches on `title` or `author` against the free-text query, ordered by `score` descending.
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: librarian
+description: Staff member who catalogs acquisitions and looks titles up.
+scope:
+  domain: library
+  boundedContext: cataloging
+type: human
+responsibilities:
+  - Record newly acquired books in the catalog
+  - Look up what the library holds
+
+---
+apiVersion: schema.esdm.io/core/v1
+kind: actor
+name: visitor
+description: >-
+  Anyone searching what the library holds, card or no card. Distinct from
+  lending's `borrower`: searching the catalog needs no membership, unlike
+  borrowing a copy.
+scope:
+  domain: library
+  boundedContext: cataloging
+type: human
+responsibilities:
+  - Search the catalog by title or author
