@@ -8,6 +8,7 @@ description: >-
   the aggregate-only contexts cannot exercise.
 scope:
   domain: library
+language: en
 ubiquitousLanguage:
   - term: Reservation
     definition: >-
@@ -74,6 +75,14 @@ invariants:
       duplicate request is rejected. Evaluated from the same borrower-keyed
       consulted state as the count above; the title comparison is decision
       logic, not a second identity key.
+  - name: release-needs-an-open-reservation
+    rule: >-
+      Only an open reservation can be released: one this borrower placed for
+      this title, and has neither released nor collected since. Releasing
+      anything else is rejected — there is nothing to take out of the count.
+      Not a limit, unlike the two above, but decided from the same consulted
+      events, which is why it belongs to this boundary and not to `release`
+      alone.
 
 ---
 apiVersion: schema.esdm.io/core/v1
