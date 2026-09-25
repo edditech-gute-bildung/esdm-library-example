@@ -119,12 +119,35 @@ scenarios:
             isbn: "978-1491950357"
             reserved-on: "2026-08-26"
 
+  - name: a-second-reservation-for-the-same-title-is-rejected
+    description: >-
+      One reservation, well under the limit, and the same title asked for
+      again. The count would allow it; the title comparison does not. A
+      borrower waits for a title once, however often they ask.
+    given:
+      - boundedContext: reservations
+        event: reserved
+        data:
+          borrower: card-4711
+          isbn: "978-0132350884"
+          reserved-on: "2026-08-01"
+    when:
+      command: reserve
+      data:
+        borrower: card-4711
+        isbn: "978-0132350884"
+      actor: borrower
+    then:
+      rejection:
+        invariant: no-duplicate-reservation-per-title
+
   - name: release-without-a-matching-reservation-is-rejected
     description: >-
-      No named invariant covers this — "you cannot release a reservation
-      you never placed" is not a limit on active reservations, just a
-      precondition on `release` — so the rejection is prose rather than an
-      invariant reference.
+      "You cannot release a reservation you never placed" is not a limit on
+      active reservations, but it is decided from the same consulted events,
+      so it is a named invariant of the boundary rather than an unwritten
+      precondition on `release`. Every refusal the model makes can be looked
+      up by name.
     given: []
     when:
       command: release
@@ -134,6 +157,4 @@ scenarios:
       actor: borrower
     then:
       rejection:
-        reason: >-
-          No open reservation exists for this borrower and this title; there
-          is nothing to release.
+        invariant: release-needs-an-open-reservation

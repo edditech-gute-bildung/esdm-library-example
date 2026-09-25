@@ -149,7 +149,8 @@ What it feeds: what's on the shelf right now, and what a borrower currently owes
 ### Reservations — waiting for a copy, and the hold shelf
 
 Reserving is claiming the next available copy of a title. You may have three
-reservations at once, and not two for the same title.
+reservations at once, not two for the same title, and you can only release one
+you actually have.
 
 Then the copy comes back, and it becomes a hold: pulled off the shelf, a slip with
 your name tucked into it, waiting at the desk. This is the part most reservation
@@ -214,7 +215,7 @@ Windows, and the download links are listed in the ESDM documentation under
 [installing ESDM](https://www.esdm.io/getting-started/installing-esdm/). On an
 Apple-silicon Mac, getting it into the repository root comes down to:
 
-    curl -LO https://esdm.s3.fr-par.scw.cloud/0.14.0/esdm-darwin-arm64
+    curl -LO https://esdm.s3.fr-par.scw.cloud/0.15.0/esdm-darwin-arm64
     mv esdm-darwin-arm64 esdm
     xattr -d com.apple.quarantine esdm
     chmod a+x esdm
@@ -223,7 +224,7 @@ Apple-silicon Mac, getting it into the repository root comes down to:
 Swap `darwin-arm64` for `darwin-amd64`, `linux-arm64`, `linux-amd64` or one of
 the Windows builds as your machine requires — the installation page lists them
 all, and carries the current version number. Linux skips the `xattr` line;
-Windows uses `Unblock-File` instead. This model was written against v0.14.0.
+Windows uses `Unblock-File` instead. This model is kept lint-clean against v0.15.0.
 
 The binary is deliberately ignored by git, so it can sit in the repository root
 without ever being committed. From there:

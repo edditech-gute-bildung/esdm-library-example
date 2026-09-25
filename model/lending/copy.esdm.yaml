@@ -8,6 +8,7 @@ description: >-
   which is precisely why they are separate contexts.
 scope:
   domain: library
+language: en
 ubiquitousLanguage:
   - term: Copy
     definition: >-
@@ -47,6 +48,22 @@ state:
     borrower: { type: string }
     due-on: { type: string, format: date }
   required: [copy-id, isbn, status]
+  # `borrower` and `due-on` exist exactly while the copy is out, and are
+  # cleared when it comes back. This was once a named invariant. It is a
+  # statement about the shape of the state, not a reason to refuse a
+  # command — no request is ever turned away because of it — so it lives
+  # here, where a validator can check it, rather than in a list a scenario
+  # could only cover by inventing a refusal.
+  if:
+    properties:
+      status: { const: on-loan }
+  then:
+    required: [borrower, due-on]
+  else:
+    not:
+      anyOf:
+        - required: [borrower]
+        - required: [due-on]
 metadata:
   labels:
     subdomain: lending-operations
@@ -55,10 +72,6 @@ invariants:
     rule: >-
       A copy whose status is `on-loan` must not be borrowed again. The second
       request is rejected rather than queued.
-  - name: due-date-set-while-on-loan
-    rule: >-
-      `due-on` and `borrower` are set exactly while `status` is `on-loan`, and
-      cleared when the copy comes back.
 
 ---
 apiVersion: schema.esdm.io/core/v1

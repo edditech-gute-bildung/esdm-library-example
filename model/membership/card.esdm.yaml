@@ -11,6 +11,7 @@ description: >-
   bought rather than built (see the `conformist` mapping in `integration/`).
 scope:
   domain: library
+language: en
 ubiquitousLanguage:
   - term: Card
     definition: >-
